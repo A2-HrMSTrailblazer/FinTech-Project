@@ -1,0 +1,26 @@
+[
+  {
+    "sku": "SKU-001",
+    "item_name": "Industrial Valve Component",
+    "quantity": 1200,
+    "unit_cost_rmb": 50,
+    "days_in_warehouse": 85,
+    "monthly_sales_velocity": 100
+  },
+  {
+    "sku": "SKU-002",
+    "item_name": "Precision Electronic Sensor",
+    "quantity": 300,
+    "unit_cost_rmb": 200,
+    "days_in_warehouse": 20,
+    "monthly_sales_velocity": 150
+  },
+  {
+    "sku": "SKU-003",
+    "item_name": "Custom Steel Bracket",
+    "quantity": 800,
+    "unit_cost_rmb": 30,
+    "days_in_warehouse": 110,
+    "monthly_sales_velocity": 40
+  }
+]
