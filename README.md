@@ -47,6 +47,8 @@ streamlit run app.py
 
 Every tab except **Ask BayFlow** works without an API key.
 
+The assistant uses `GEMINI_MODEL` (default `gemini-flash-latest`). If Gemini is busy (429/5xx), BayFlow retries twice and then tries each model in `GEMINI_FALLBACK_MODELS`. If all are busy, the question is undone so the owner can simply ask again.
+
 ## Project layout
 
 ```

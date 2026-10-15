@@ -168,3 +168,60 @@ def test_gemini_backend_builds_valid_requests(monkeypatch, env):
     assert seen[0][2].tools[0].function_declarations[0].name
     fn_resp = seen[1][1][-1].parts[0].function_response
     assert fn_resp.name == "forecast_cash" and "data" in fn_resp.response
+
+
+def _fake_gemini(env, behaviours, **kw):
+    """GeminiBackend whose HTTP layer follows a script: an exception to raise or a text reply."""
+    from google.genai import types
+    ds, store, disp = env
+    calls = []
+
+    class FakeModels:
+        def generate_content(self, model, contents, config):
+            calls.append(model)
+            b = behaviours.pop(0)
+            if isinstance(b, Exception):
+                raise b
+            return types.GenerateContentResponse(candidates=[types.Candidate(content=types.Content(
+                role="model", parts=[types.Part.from_text(text=b)]))])
+
+    backend = GeminiBackend(api_key="k", model="main-model", backoff_s=0, **kw)
+    backend.client = type("C", (), {"models": FakeModels()})()
+    return Agent(backend, disp, store), backend, calls
+
+
+def _busy():
+    from google.genai import errors
+    return errors.ServerError(503, {"error": {"code": 503, "message": "high demand", "status": "UNAVAILABLE"}})
+
+
+def test_busy_model_is_retried(env):
+    agent, backend, calls = _fake_gemini(env, [_busy(), _busy(), "All good."], fallback_models=[])
+    assert agent.ask("hi").text == "All good."
+    assert calls == ["main-model"] * 3
+
+
+def test_falls_back_to_second_model(env):
+    agent, backend, calls = _fake_gemini(env, [_busy(), _busy(), _busy(), "From fallback."],
+                                         fallback_models=["backup-model"])
+    assert agent.ask("hi").text == "From fallback."
+    assert calls[-1] == "backup-model" and backend.last_model_used == "backup-model"
+
+
+def test_failed_question_is_rolled_back(env):
+    from bayflow.agent import ModelUnavailable
+    agent, backend, calls = _fake_gemini(env, [_busy()] * 3 + ["Second try works."], fallback_models=[])
+    with pytest.raises(ModelUnavailable):
+        agent.ask("first try")
+    assert backend.contents == []                       # no half-finished turn left behind
+    assert agent.ask("second try").text == "Second try works."
+    assert len(backend.contents) == 2
+
+
+def test_non_busy_errors_are_not_retried(env):
+    from google.genai import errors
+    bad_key = errors.ClientError(400, {"error": {"code": 400, "message": "API key not valid", "status": "INVALID_ARGUMENT"}})
+    agent, backend, calls = _fake_gemini(env, [bad_key], fallback_models=["backup-model"])
+    with pytest.raises(errors.ClientError):
+        agent.ask("hi")
+    assert calls == ["main-model"]

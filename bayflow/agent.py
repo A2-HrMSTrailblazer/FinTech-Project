@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -20,7 +21,7 @@ SYSTEM_PROMPT = """You are BayFlow, a finance copilot for the owner of a small T
 
 How you work:
 - Use the tools for every number. Never calculate, estimate or invent figures yourself.
-- Answer in the language the owner writes in (Thai or English). Use plain words, short sentences, baht amounts.
+- Answer in English. Use plain words, short sentences, and baht amounts.
 - For each finding, name the record IDs (bill_id, txn_id, purchase_id, date) so the owner can check it.
 - Differences in records are usually timing, keying or counting errors. Never accuse staff or anyone of theft.
 - If information is missing, say what is missing and ask for it. Do not guess.
@@ -46,10 +47,15 @@ class ModelTurn:
     calls: list[ToolCall] = field(default_factory=list)
 
 
+class ModelUnavailable(RuntimeError):
+    """The model service is busy or down. The conversation is left as it was before the question."""
+
+
 class Backend(Protocol):
     def start(self, system_prompt: str, declarations: list[dict]) -> None: ...
     def send_user(self, text: str) -> ModelTurn: ...
     def send_tool_results(self, results: list[tuple[ToolCall, dict]]) -> ModelTurn: ...
+    # Optional: mark() -> int and rollback(mark) let a failed question be undone cleanly.
 
 
 # ---------------------------------------------------------------------------
@@ -114,6 +120,16 @@ class Agent:
     def ask(self, question: str) -> AgentReply:
         session = self.dispatcher.session
         self.store.log("owner", "message", args={"text": question[:1000]}, session=session)
+        mark = self.backend.mark() if hasattr(self.backend, "mark") else None
+        try:
+            return self._run(question, session)
+        except ModelUnavailable as e:
+            if mark is not None:
+                self.backend.rollback(mark)
+            self.store.log("system", "model_unavailable", outcome=str(e)[:300], session=session)
+            raise
+
+    def _run(self, question: str, session: str) -> AgentReply:
         turn = self.backend.send_user(question)
         trace, sources, proposals = [], [question], []
         steps = 0
@@ -146,7 +162,10 @@ class Agent:
 class GeminiBackend:
     """Keeps the native Gemini conversation (including any thought signatures)."""
 
-    def __init__(self, api_key: str | None = None, model: str | None = None):
+    RETRY_CODES = {429, 500, 502, 503, 504}
+
+    def __init__(self, api_key: str | None = None, model: str | None = None,
+                 fallback_models: list[str] | None = None, retries: int = 2, backoff_s: float = 2.0):
         from google import genai
         from google.genai import types
         self.types = types
@@ -154,7 +173,13 @@ class GeminiBackend:
         if not key:
             raise RuntimeError("GEMINI_API_KEY is not set. Put it in a .env file (never commit it).")
         self.client = genai.Client(api_key=key)
-        self.model = model or os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+        self.model = model or os.getenv("GEMINI_MODEL", "gemini-flash-latest")
+        if fallback_models is None:
+            env = os.getenv("GEMINI_FALLBACK_MODELS", "gemini-2.5-flash")
+            fallback_models = [m.strip() for m in env.split(",") if m.strip()]
+        self.fallback_models = [m for m in fallback_models if m != self.model]
+        self.retries, self.backoff_s = retries, backoff_s
+        self.last_model_used: str | None = None
         self.contents: list = []
         self.config = None
 
@@ -169,8 +194,36 @@ class GeminiBackend:
             temperature=0.2,
         )
 
+    def mark(self) -> int:
+        return len(self.contents)
+
+    def rollback(self, mark: int) -> None:
+        del self.contents[mark:]
+
+    def _call(self):
+        """Try the main model with retries, then each fallback model once.
+        Busy/overloaded errors (429, 5xx) are retried; other errors are raised as they are."""
+        from google.genai import errors
+        attempts = [(self.model, i) for i in range(self.retries + 1)] + [(m, 0) for m in self.fallback_models]
+        last = None
+        for model, retry_no in attempts:
+            if retry_no:
+                time.sleep(self.backoff_s * (2 ** (retry_no - 1)))
+            try:
+                resp = self.client.models.generate_content(model=model, contents=self.contents, config=self.config)
+                self.last_model_used = model
+                return resp
+            except errors.APIError as e:
+                last = e
+                if e.code == 404 and model != self.model:
+                    continue          # fallback model not available on this key
+                if e.code not in self.RETRY_CODES:
+                    raise
+        raise ModelUnavailable(f"Gemini is busy right now ({getattr(last, 'code', '?')}). "
+                               "Please try again in a minute.") from last
+
     def _generate(self) -> ModelTurn:
-        resp = self.client.models.generate_content(model=self.model, contents=self.contents, config=self.config)
+        resp = self._call()
         cand = resp.candidates[0] if resp.candidates else None
         if cand is None or cand.content is None:
             return ModelTurn(text="The model returned no answer (it may have been blocked). Please rephrase.")

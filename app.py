@@ -10,7 +10,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from bayflow import checks
-from bayflow.agent import Agent, GeminiBackend
+from bayflow.agent import Agent, GeminiBackend, ModelUnavailable
 from bayflow.data import DataError, load_dataset
 from bayflow.store import Store
 from bayflow.tools import Dispatcher, owner_decide
@@ -113,7 +113,7 @@ with tab_ask:
             disp = Dispatcher(ds, store, session=st.session_state.session)
             st.session_state.agent = Agent(GeminiBackend(), disp, store)
         st.caption("Try: *Did I receive all the money from last month's sales?* · *Why did my cash go down?* · "
-                   "*Can I buy a 25,000 baht freezer on 3 October?* · *ขายได้เงินครบไหมเดือนที่แล้ว*")
+                   "*Can I buy a 25,000 baht freezer on 3 October?*")
         for m in st.session_state.chat:
             with st.chat_message(m["role"]):
                 st.markdown(m["text"])
@@ -122,6 +122,8 @@ with tab_ask:
                 if m.get("unverified"):
                     st.warning("These numbers could not be traced to your records, please double-check: "
                                + ", ".join(m["unverified"]))
+        if st.session_state.get("ask_error"):
+            st.warning(st.session_state.pop("ask_error"))
         q = st.chat_input("Ask about your sales, stock, cash or tax papers")
         if q:
             st.session_state.chat.append({"role": "user", "text": q})
@@ -130,7 +132,10 @@ with tab_ask:
                     r = st.session_state.agent.ask(q)
                     st.session_state.chat.append({"role": "assistant", "text": r.text, "tools": r.tool_calls,
                                                   "unverified": r.unverified_numbers})
-                except Exception as e:  # network/API errors are shown, not hidden
+                except ModelUnavailable as e:
+                    st.session_state.chat.pop()   # let the owner ask again
+                    st.session_state.ask_error = f"{e} The other tabs still work without the assistant."
+                except Exception as e:  # other API errors are shown, not hidden
                     st.session_state.chat.append({"role": "assistant", "text": f"Sorry, the assistant failed: {e}"})
             st.rerun()
 
