@@ -1,0 +1,10 @@
+{
+  "_note": "Rules used by BayFlow's tax-document checks. Team: verify every value at rd.go.th before the demo. These are reminders, not tax advice.",
+  "vat_rate_pct": 7,
+  "vat_rate_valid_until": "2027-09-30",
+  "vat_registration_threshold_thb": 1800000,
+  "pp30_due_day_efile": 23,
+  "pp30_due_day_paper": 15,
+  "efile_extension_until": "2027-01-31",
+  "record_retention_years": 5
+}

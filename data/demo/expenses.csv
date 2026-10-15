@@ -1,0 +1,11 @@
+expense_id,date,category,description,amount
+E0001,2026-08-05,rent,Shop rent,12000
+E0002,2026-08-12,electricity,PEA electricity bill,4200
+E0003,2026-08-15,gas,LPG refill,1800
+E0004,2026-08-20,packaging,Boxes and bags,2000
+E0005,2026-08-28,wages,Staff wages (2 staff),18000
+E0006,2026-09-05,rent,Shop rent,12000
+E0007,2026-09-12,electricity,PEA electricity bill,6150
+E0008,2026-09-15,gas,LPG refill,1800
+E0009,2026-09-20,packaging,Boxes and bags,2650
+E0010,2026-09-28,wages,Staff wages (2 staff),18000
