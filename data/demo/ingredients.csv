@@ -1,7 +1,0 @@
-ingredient_id,name,unit,unit_cost_thb,waste_allowance_pct
-ING-CHK,Chicken,kg,95.0,5
-ING-PRK,Pork,kg,140.0,5
-ING-RCE,Jasmine rice,kg,32.0,3
-ING-EGG,Eggs,pcs,4.5,4
-ING-BSL,Holy basil,kg,120.0,10
-ING-GRL,Garlic,kg,90.0,5

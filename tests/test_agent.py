@@ -3,6 +3,7 @@
 The model is replaced by scripted backends, so these tests run offline and
 show exactly what happens when a model behaves well or badly.
 """
+import json
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from bayflow.store import Store
 from bayflow.tools import Dispatcher, PermissionDenied, owner_decide
 
 DEMO = Path(__file__).resolve().parent.parent / "data" / "demo"
+KEY = json.loads((DEMO / "answer_key.json").read_text())
 
 
 class ScriptedBackend:
@@ -44,7 +46,7 @@ def env():
 def test_agent_only_sees_read_and_suggest_tools(env):
     ds, store, disp = env
     names = {d["name"] for d in disp.declarations()}
-    assert names == {"reconcile_sales_payments", "stock_variance", "explain_cash_change", "forecast_cash",
+    assert names == {"reconcile_sales_payments", "cash_flow_summary", "forecast_cash",
                      "check_spending", "check_tax_documents", "propose_correction"}
 
 
@@ -52,8 +54,8 @@ def test_agent_answers_from_tool_results(env):
     ds, store, disp = env
     backend = ScriptedBackend([
         ModelTurn(calls=[ToolCall("reconcile_sales_payments", {"start": "2026-09-01", "end": "2026-09-30"})]),
-        ModelTurn(text="In September you recorded 161,940 baht of sales and received 160,620 baht. "
-                       "4 items need a look, 1,320 baht in total."),
+        ModelTurn(text="In September you recorded 161,110 baht of sales and received 159,875 baht. "
+                       "3 items need a look, 1,235 baht in total."),
     ])
     reply = Agent(backend, disp, store).ask("Did I get all my money in September?")
     assert reply.unverified_numbers == []
@@ -67,7 +69,7 @@ def test_made_up_number_is_flagged(env):
     ds, store, disp = env
     backend = ScriptedBackend([
         ModelTurn(calls=[ToolCall("check_tax_documents", {"month": "2026-09"})]),
-        ModelTurn(text="Two purchases have no tax invoice, so 165.77 baht of VAT is at risk. "
+        ModelTurn(text="Two purchases have no tax invoice, so 137.39 baht of VAT is at risk. "
                        "You could save about 4,800 baht a year."),
     ])
     reply = Agent(backend, disp, store).ask("Any tax paperwork problems?")
@@ -90,16 +92,18 @@ def test_agent_cannot_approve_even_if_it_tries(env):
 
 def test_proposal_changes_nothing_until_owner_approves(env, tmp_path):
     ds, store, disp = env
-    bill = "B260911-2986"
+    dup = KEY["duplicate_bills"][0]
+    bill = dup["duplicate"]
     before = ds.sales.line_total.sum()
     result = disp.call("propose_correction", {"kind": "void_bill", "args": {"bill_id": bill},
-                                              "reason": "Identical to B260911-2928, cash short by the same amount"})
+                                              "reason": f"Identical to {dup['original']}"})
     assert result["status"] == "pending"
-    assert load_dataset(DEMO, store.approved_corrections()).sales.line_total.sum() == before
+    assert load_dataset(DEMO, store.approved_corrections("demo")).sales.line_total.sum() == before
 
     owner_decide(store, result["proposal_id"], approve=True)
-    after = load_dataset(DEMO, store.approved_corrections())
-    assert before - after.sales.line_total.sum() == 125
+    after = load_dataset(DEMO, store.approved_corrections("demo"))
+    assert before - after.sales.line_total.sum() == dup["amount"]
+    assert store.approved_corrections("upload-other") == []        # approvals belong to one set of records
     with pytest.raises(ValueError):
         owner_decide(store, result["proposal_id"], approve=False)   # cannot decide twice
 
@@ -118,7 +122,7 @@ def test_injected_instruction_in_records_has_no_power(env):
     ds, store, disp = env
     note = ds.purchases.loc[ds.purchases.note.str.contains("IGNORE"), "note"].iloc[0]
     disp.call("propose_correction", {"kind": "set_tax_invoice",
-                                     "args": {"purchase_id": "P00296", "has_tax_invoice": "yes"}, "reason": "test"})
+                                     "args": {"purchase_id": KEY["missing_tax_invoice"][0]["purchase_id"], "has_tax_invoice": "yes"}, "reason": "test"})
     backend = ScriptedBackend([
         ModelTurn(calls=[ToolCall("check_tax_documents", {})]),
         ModelTurn(calls=[ToolCall("owner_decide", {"proposal_id": 1, "approve": True}),

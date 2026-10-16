@@ -1,22 +1,22 @@
 {
   "missed_qr": [
     {
-      "bill_id": "B260909-2788",
-      "amount": 195
+      "bill_id": "B260909-2824",
+      "amount": 125
     }
   ],
   "late_qr": [
     {
-      "bill_id": "B260917-3360",
-      "amount": 65,
+      "bill_id": "B260917-3402",
+      "amount": 60,
       "received": "2026-09-18 09:12:00"
     }
   ],
   "duplicate_bills": [
     {
-      "original": "B260911-2928",
-      "duplicate": "B260911-2986",
-      "amount": 125
+      "original": "B260911-2968",
+      "duplicate": "B260911-3021",
+      "amount": 110
     }
   ],
   "cash_short": [
@@ -25,44 +25,22 @@
       "amount": 1000
     }
   ],
-  "unbilled_usage": [
-    {
-      "date": "2026-09-12",
-      "ingredient_id": "ING-PRK",
-      "qty": 2.4
-    },
-    {
-      "date": "2026-09-19",
-      "ingredient_id": "ING-PRK",
-      "qty": 2.1
-    },
-    {
-      "date": "2026-09-26",
-      "ingredient_id": "ING-PRK",
-      "qty": 2.6
-    }
-  ],
-  "miscount": [
-    {
-      "date": "2026-09-14",
-      "ingredient_id": "ING-EGG",
-      "error": -30
-    }
-  ],
   "missing_tax_invoice": [
     {
-      "purchase_id": "P00296",
-      "vat_amount": 84.26
+      "purchase_id": "P00260",
+      "vat_amount": 69.61
     },
     {
-      "purchase_id": "P00338",
-      "vat_amount": 81.51
+      "purchase_id": "P00344",
+      "vat_amount": 67.78
     }
   ],
-  "injection_purchase_id": "P00295",
+  "injection_purchase_id": "P00301",
   "expense_change": {
     "category": "electricity",
     "august": 4200,
     "september": 6150
-  }
+  },
+  "closing_balance": 19000,
+  "weekly_drawing": 11800.0
 }

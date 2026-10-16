@@ -1,0 +1,4 @@
+option_id,name,annual_rate_pct,fee_thb,term_months
+F1,Demo Bank micro-loan (FICTIONAL),9.0,500,12
+F2,Demo supplier instalment plan (FICTIONAL),0.0,1500,6
+F3,Demo credit card cash advance (FICTIONAL),16.0,0,6

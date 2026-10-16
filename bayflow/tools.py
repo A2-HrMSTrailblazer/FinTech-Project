@@ -50,8 +50,17 @@ def _cap(obj, n=MAX_LIST_ITEMS):
 
 def _forecast_view(ds: Dataset, days: int = 31) -> dict:
     f = checks.forecast_cash(ds, days)
-    f["days_with_bills"] = [d for d in f.pop("days") if d["bills"]]
+    f.pop("days")
+    f.pop("bills_at_risk")
     return f
+
+
+def _cash_flow_view(ds: Dataset, month: str | None = None, compare_to: str | None = None) -> dict:
+    c = checks.cash_flow_summary(ds, month, compare_to)
+    for k in ("month", "previous_month"):
+        if k in c:
+            c[k].pop("paid_by_category", None)
+    return c
 
 
 def _propose(ds: Dataset, store: Store, session: str, kind: str, args: dict, reason: str) -> dict:
@@ -62,7 +71,7 @@ def _propose(ds: Dataset, store: Store, session: str, kind: str, args: dict, rea
         raise ValueError(f"args missing: {missing}")
     args = {k: args[k] for k in CORRECTION_KINDS[kind]}
     current = describe_current_value(ds, kind, args)
-    pid = store.add_proposal(kind, args, current, reason, session)
+    pid = store.add_proposal(kind, args, current, reason, session, ds.dataset_id)
     return {"proposal_id": pid, "status": "pending",
             "message": "Saved for the owner to approve or reject. Nothing in the records has changed."}
 
@@ -70,37 +79,37 @@ def _propose(ds: Dataset, store: Store, session: str, kind: str, args: dict, rea
 def build_tools() -> dict[str, Tool]:
     date_s = {"type": "string", "description": "Date as YYYY-MM-DD"}
     month_s = {"type": "string", "description": "Month as YYYY-MM"}
+    days_s = {"type": "integer", "description": "Forecast length in days, 1 to 180 (default 31)"}
     tools = [
         Tool("reconcile_sales_payments", READ,
-             "Check whether recorded sales were actually received: matches QR bills to PromptPay receipts and "
-             "cash sales to the daily cash count. Defaults to the latest month.",
+             "Check whether recorded sales were actually received: matches QR bills to QR/bank receipts and "
+             "cash sales to the daily cash count. Flags missing, late and double-entered payments. "
+             "Defaults to the latest month.",
              {"type": "object", "properties": {"start": date_s, "end": date_s}},
              lambda ds, **a: checks.reconcile_sales_payments(ds, a.get("start"), a.get("end"))),
-        Tool("stock_variance", READ,
-             "Compare ingredient usage implied by sales and recipes with actual usage from stock counts and "
-             "purchases. Finds unexplained usage (e.g. food served but not billed) and likely count errors.",
-             {"type": "object", "properties": {"start": date_s, "end": date_s,
-                                               "ingredient_id": {"type": "string"}}},
-             lambda ds, **a: checks.stock_variance(ds, a.get("start"), a.get("end"), a.get("ingredient_id"))),
-        Tool("explain_cash_change", READ,
-             "Compare recorded sales and spending by category between two months to explain why cash changed.",
-             {"type": "object", "properties": {"month_a": month_s, "month_b": month_s},
-              "required": ["month_a", "month_b"]},
-             lambda ds, **a: checks.explain_cash_change(ds, a["month_a"], a["month_b"])),
+        Tool("cash_flow_summary", READ,
+             "Cash flow and profit for a month compared with another month: opening cash, money received, money "
+             "paid, closing cash, net sales, gross and operating profit, expense-to-sales ratios per category and "
+             "percentage changes. Includes the formulas used. Defaults to the latest month vs the month before.",
+             {"type": "object", "properties": {"month": month_s, "compare_to": month_s}},
+             lambda ds, **a: _cash_flow_view(ds, a.get("month"), a.get("compare_to"))),
         Tool("forecast_cash", READ,
-             "Project the cash balance day by day from the as-of date, including known bills and the estimated "
-             "VAT payment. Returns the lowest point and the first day below the owner's safety buffer.",
-             {"type": "object", "properties": {"days": {"type": "integer", "description": "1 to 90"}}},
-             lambda ds, **a: _forecast_view(ds, max(1, min(int(a.get("days", 31)), 90)))),
+             "Project cash day by day and list every upcoming bill with the cash left after paying it and a status "
+             "(ok / below buffer / cannot pay). States the forecast period; nothing after it is checked.",
+             {"type": "object", "properties": {"days": days_s}},
+             lambda ds, **a: _forecast_view(ds, int(a.get("days", 31)))),
         Tool("check_spending", READ,
-             "Answer 'can I afford this?': compares the cash forecast with and without a planned purchase, and "
-             "optionally compares financing options (demo options are fictional).",
+             "Answer 'can I afford this?': compares the forecast with and without a planned purchase, lists bills "
+             "that become hard to pay (amount, due date), and compares financing options (demo options are "
+             "fictional), including how many repayments fall after the forecast period.",
              {"type": "object", "properties": {
                  "amount": {"type": "number"}, "spend_date": date_s, "description": {"type": "string"},
-                 "compare_financing": {"type": "boolean"}}, "required": ["amount", "spend_date"]},
+                 "compare_financing": {"type": "boolean"}, "horizon_days": days_s},
+              "required": ["amount", "spend_date"]},
              lambda ds, **a: checks.check_spending(ds, float(a["amount"]), a["spend_date"],
                                                    a.get("description", "Planned purchase"),
-                                                   bool(a.get("compare_financing", True)))),
+                                                   bool(a.get("compare_financing", True)),
+                                                   int(a.get("horizon_days", 31)))),
         Tool("check_tax_documents", READ,
              "List purchases from VAT-registered suppliers that have no tax invoice (input VAT at risk), and "
              "estimate the month's VAT payment and PP.30 due date. Planning estimate only.",
@@ -108,14 +117,13 @@ def build_tools() -> dict[str, Tool]:
              lambda ds, **a: checks.check_tax_documents(ds, a.get("month"))),
         Tool("propose_correction", SUGGEST,
              "Create a correction for the OWNER to approve. It does not change any record. Kinds and their args: "
-             "void_bill{bill_id}; set_stock_count{date, ingredient_id, closing_count}; "
-             "set_tax_invoice{purchase_id, has_tax_invoice}; set_cash_count{date, counted_cash}.",
+             "void_bill{bill_id}; set_tax_invoice{purchase_id, has_tax_invoice}; set_cash_count{date, counted_cash}.",
              {"type": "object", "properties": {
                  "kind": {"type": "string", "enum": sorted(CORRECTION_KINDS)},
                  "args": {"type": "object", "description": "Arguments for the chosen kind"},
                  "reason": {"type": "string", "description": "Why, citing the record IDs"}},
               "required": ["kind", "args", "reason"]},
-             None),  # needs the store; bound in Dispatcher
+             None),  # needs the store; handled in Dispatcher
     ]
     return {t.name: t for t in tools}
 

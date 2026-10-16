@@ -37,6 +37,7 @@ class Store:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created_ts TEXT NOT NULL,
             session TEXT,
+            dataset TEXT NOT NULL DEFAULT 'demo',
             kind TEXT NOT NULL,
             args TEXT NOT NULL,
             current_value TEXT,
@@ -46,6 +47,9 @@ class Store:
             decided_by TEXT
         );
         """)
+        cols = {r["name"] for r in self.db.execute("PRAGMA table_info(proposals)")}
+        if "dataset" not in cols:          # database made by an earlier version
+            self.db.execute("ALTER TABLE proposals ADD COLUMN dataset TEXT NOT NULL DEFAULT 'demo'")
         self.db.commit()
 
     # ---- audit -------------------------------------------------------------
@@ -62,17 +66,22 @@ class Store:
         return [dict(r) for r in self.db.execute(q)]
 
     # ---- proposals ---------------------------------------------------------
-    def add_proposal(self, kind: str, args: dict, current_value, reason: str, session: str | None = None) -> int:
+    def add_proposal(self, kind: str, args: dict, current_value, reason: str, session: str | None = None,
+                     dataset: str = "demo") -> int:
         cur = self.db.execute(
-            "INSERT INTO proposals (created_ts, session, kind, args, current_value, reason) VALUES (?,?,?,?,?,?)",
-            (_now(), session, kind, json.dumps(args), json.dumps(current_value, default=str), reason))
+            "INSERT INTO proposals (created_ts, session, dataset, kind, args, current_value, reason) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (_now(), session, dataset, kind, json.dumps(args), json.dumps(current_value, default=str), reason))
         self.db.commit()
         return int(cur.lastrowid)
 
-    def proposals(self, status: str | None = None) -> list[dict]:
-        q, p = "SELECT * FROM proposals", ()
+    def proposals(self, status: str | None = None, dataset: str | None = None) -> list[dict]:
+        where, p = [], []
         if status:
-            q, p = q + " WHERE status = ?", (status,)
+            where.append("status = ?"); p.append(status)
+        if dataset:
+            where.append("dataset = ?"); p.append(dataset)
+        q = "SELECT * FROM proposals" + (" WHERE " + " AND ".join(where) if where else "")
         rows = []
         for r in self.db.execute(q + " ORDER BY id", p):
             d = dict(r)
@@ -93,5 +102,5 @@ class Store:
         self.db.commit()
         return next(p for p in self.proposals() if p["id"] == proposal_id)
 
-    def approved_corrections(self) -> list[dict]:
-        return [{"kind": p["kind"], "args": p["args"]} for p in self.proposals("approved")]
+    def approved_corrections(self, dataset: str = "demo") -> list[dict]:
+        return [{"kind": p["kind"], "args": p["args"]} for p in self.proposals("approved", dataset)]
