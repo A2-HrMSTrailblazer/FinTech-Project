@@ -1,5 +1,7 @@
 pandas>=2.2
 streamlit>=1.40
+altair>=5.0
+openpyxl>=3.1
 google-genai>=1.0
 python-dotenv>=1.0
 pytest>=8.0
