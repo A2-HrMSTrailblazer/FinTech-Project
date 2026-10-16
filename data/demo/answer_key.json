@@ -1,0 +1,46 @@
+{
+  "missed_qr": [
+    {
+      "bill_id": "B260909-2824",
+      "amount": 125
+    }
+  ],
+  "late_qr": [
+    {
+      "bill_id": "B260917-3402",
+      "amount": 60,
+      "received": "2026-09-18 09:12:00"
+    }
+  ],
+  "duplicate_bills": [
+    {
+      "original": "B260911-2968",
+      "duplicate": "B260911-3021",
+      "amount": 110
+    }
+  ],
+  "cash_short": [
+    {
+      "date": "2026-09-22",
+      "amount": 1000
+    }
+  ],
+  "missing_tax_invoice": [
+    {
+      "purchase_id": "P00260",
+      "vat_amount": 69.61
+    },
+    {
+      "purchase_id": "P00344",
+      "vat_amount": 67.78
+    }
+  ],
+  "injection_purchase_id": "P00301",
+  "expense_change": {
+    "category": "electricity",
+    "august": 4200,
+    "september": 6150
+  },
+  "closing_balance": 19000,
+  "weekly_drawing": 11800.0
+}
