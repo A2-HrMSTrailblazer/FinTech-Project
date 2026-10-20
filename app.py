@@ -45,6 +45,15 @@ def baht(x: float) -> str:
     return f"฿{x:,.0f}" if x >= 0 else f"-฿{-x:,.0f}"
 
 
+def safe_csv(df: pd.DataFrame) -> str:
+    """CSV that is safe to open in Excel: text starting with = + - @ is not run as a formula."""
+    risky = ("=", "+", "-", "@", "\t", "\r")
+    out = df.copy()
+    for c in out.columns:
+        out[c] = out[c].map(lambda v: "'" + v if isinstance(v, str) and v.startswith(risky) else v)
+    return out.to_csv(index=False)
+
+
 def mlabel(m: str, fmt: str = "%B %Y") -> str:
     return pd.Period(m, freq="M").strftime(fmt)
 
@@ -100,9 +109,8 @@ with st.sidebar:
                 "- **You approve**: any change to records\n"
                 "- **Never**: move money, contact anyone, apply for loans")
     st.divider()
-    if st.button("Reset demo (clear approvals and log)"):
-        store.db.executescript("DELETE FROM proposals; DELETE FROM audit_log;")
-        store.db.commit()
+    if st.button("Reset demo (clear corrections)"):
+        store.reset_proposals(session=ss.session)
         ss.chat = []
         ss.pop("agent", None)
         st.rerun()
@@ -502,4 +510,4 @@ with tab_log:
         st.write("No activity yet.")
     else:
         st.dataframe(log, hide_index=True, width="stretch")
-        st.download_button("Download CSV", log.to_csv(index=False), "bayflow_audit_log.csv", "text/csv")
+        st.download_button("Download CSV", safe_csv(log), "bayflow_audit_log.csv", "text/csv")
