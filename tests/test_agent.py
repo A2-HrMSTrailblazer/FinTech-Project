@@ -229,3 +229,15 @@ def test_non_busy_errors_are_not_retried(env):
     with pytest.raises(errors.ClientError):
         agent.ask("hi")
     assert calls == ["main-model"]
+
+
+def test_demo_reset_keeps_the_audit_log(env):
+    ds, store, disp = env
+    disp.call("forecast_cash", {"days": 7})
+    disp.call("propose_correction", {"kind": "void_bill", "args": {"bill_id": KEY["duplicate_bills"][0]["duplicate"]},
+                                     "reason": "test"})
+    before = len(store.audit_rows())
+    assert store.reset_proposals() == 1
+    assert store.proposals() == []
+    rows = store.audit_rows()
+    assert len(rows) == before + 1 and rows[-1]["event"] == "demo_reset"
