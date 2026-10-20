@@ -102,5 +102,14 @@ class Store:
         self.db.commit()
         return next(p for p in self.proposals() if p["id"] == proposal_id)
 
+    def reset_proposals(self, actor: str = "owner", session: str | None = None) -> int:
+        """Demo reset: clears corrections only. The audit log is never deleted;
+        the reset itself is recorded in it."""
+        n = self.db.execute("SELECT COUNT(*) FROM proposals").fetchone()[0]
+        self.db.execute("DELETE FROM proposals")
+        self.db.commit()
+        self.log(actor, "demo_reset", outcome=f"{n} corrections cleared", session=session)
+        return int(n)
+
     def approved_corrections(self, dataset: str = "demo") -> list[dict]:
         return [{"kind": p["kind"], "args": p["args"]} for p in self.proposals("approved", dataset)]
