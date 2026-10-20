@@ -177,7 +177,7 @@ class GeminiBackend:
         self.client = genai.Client(api_key=key)
         self.model = model or os.getenv("GEMINI_MODEL", "gemini-flash-latest")
         if fallback_models is None:
-            env = os.getenv("GEMINI_FALLBACK_MODELS", "gemini-2.5-flash")
+            env = os.getenv("GEMINI_FALLBACK_MODELS", "gemini-3.1-flash")
             fallback_models = [m.strip() for m in env.split(",") if m.strip()]
         self.fallback_models = [m for m in fallback_models if m != self.model]
         self.retries, self.backoff_s = retries, backoff_s
