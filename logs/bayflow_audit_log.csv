@@ -1,0 +1,6 @@
+id,ts,session,actor,event,tool,tier,args,outcome
+1,2026-10-20T08:20:30+00:00,7c4a78dc,owner,proposal,propose_correction,SUGGEST,"{""kind"": ""void_bill"", ""args"": {""bill_id"": ""B260911-3021""}}",proposal 1
+2,2026-10-20T08:22:34+00:00,7c4a78dc,owner,tool_call,check_spending,READ,"{""amount"": 25000, ""date"": ""2026-10-03"", ""horizon_days"": 31}",ok
+3,2026-10-20T08:24:31+00:00,7c4a78dc,owner,message,,,"{""text"": ""Why did my cash change in September, and which costs went up?""}",
+4,2026-10-20T08:25:47+00:00,7c4a78dc,agent,tool_call,cash_flow_summary,READ,{},ok
+5,2026-10-20T08:27:17+00:00,7c4a78dc,agent,number_check,,,"{""unverified"": [""156.10"", ""12,007.84""]}",flagged
